@@ -1,38 +1,22 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import fs from 'fs';
-import path from 'path';
 
-// Define DB path
-const DB_PATH = path.join(process.cwd(), 'data', 'projects.json');
+// Initialize OpenAI client with Minimax configuration as default
+import { OpenAI } from "openai";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const minimaxClient = new OpenAI({
+  apiKey: process.env.MINIMAX_API_KEY,
+  baseURL: "https://api.minimax.io/v1",
+});
 
-// Ensure data directory exists
-if (!fs.existsSync(path.dirname(DB_PATH))) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fs.writeFileSync(DB_PATH, '[]');
+// In-memory store for projects
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  var _projects: any[];
 }
-
-// Helper to read projects
-function getProjects() {
-    try {
-        if (!fs.existsSync(DB_PATH)) return [];
-        const data = fs.readFileSync(DB_PATH, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        console.error("Error reading projects DB:", error);
-        return [];
-    }
-}
-
-// Helper to save projects
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function saveProjects(projects: any[]) {
-    try {
-        fs.writeFileSync(DB_PATH, JSON.stringify(projects, null, 2));
-    } catch (error) {
-        console.error("Error saving projects DB:", error);
-    }
+if (!global._projects) {
+  global._projects = [];
 }
 
 export async function POST(req: Request) {
@@ -58,13 +42,13 @@ export async function POST(req: Request) {
       prompt,
       model: selectedModel,
       updated_at: new Date().toISOString(),
-      files: {}, // Multi-file structure
+      files: {},
       explanation: "Generating..."
     };
 
-    const projects = getProjects();
-    projects.unshift(newProject);
-    saveProjects(projects);
+    // Use global store
+    global._projects.unshift(newProject);
+    console.log(`Project ${id} created. Total projects: ${global._projects.length}`);
 
     return NextResponse.json(newProject);
 
@@ -83,8 +67,7 @@ export async function GET() {
       return NextResponse.json({ projects: [] });
   }
 
-  const projects = getProjects();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userProjects = projects.filter((p: any) => p.userId === userId);
+  const userProjects = global._projects.filter((p: any) => p.userId === userId);
   return NextResponse.json({ projects: userProjects });
 }

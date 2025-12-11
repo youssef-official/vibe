@@ -1,4 +1,6 @@
-import type { Metadata } from "next";
+'use client';
+
+import { SessionProvider } from 'next-auth/react';
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,11 +14,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Lovable Clone",
-  description: "Build apps with AI",
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -25,9 +22,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white min-h-screen flex flex-col`}
       >
-        {children}
+        <SessionProvider>
+            {children}
+        </SessionProvider>
       </body>
     </html>
   );

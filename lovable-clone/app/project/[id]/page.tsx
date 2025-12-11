@@ -32,11 +32,9 @@ export default function ProjectPage() {
   useEffect(() => {
     async function fetchProject() {
       try {
-        const res = await fetch('/api/projects');
+        const res = await fetch(`/api/projects/${id}`);
         if (res.ok) {
-          const data = await res.json();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const found = data.projects.find((p: any) => p.id === id);
+          const found = await res.json();
           if (found) {
             setProject(found);
 
@@ -55,6 +53,9 @@ export default function ProjectPage() {
                 ]);
             }
           }
+        } else {
+            console.error("Project not found or error:", res.status);
+            setProject(null);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -62,7 +63,7 @@ export default function ProjectPage() {
         setLoading(false);
       }
     }
-    fetchProject();
+    if (id) fetchProject();
   }, [id]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

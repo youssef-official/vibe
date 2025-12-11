@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSession } from 'next-auth/react';
+import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { UserButton } from '@/components/UserButton';
 import { Sparkles, ArrowRight, Grid2X2, Clock, Loader2 } from 'lucide-react';
@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { ModelSelector } from '@/components/ModelSelector';
 
 function HomePage() {
-  const { data: session } = useSession();
+  const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
   const [promptInput, setPromptInput] = useState('');
   const [projects, setProjects] = useState<any[]>([]);
@@ -38,11 +38,7 @@ function HomePage() {
 
   // Fetch user projects
   useEffect(() => {
-    // Only fetch if session exists? Or fetch all for demo.
-    // The original code checked for session.
-    // For demo purpose, we might want to fetch even if not logged in if we store in memory?
-    // But let's stick to the logic:
-    if (!session) {
+    if (!isLoaded || !isSignedIn) {
       setProjectsLoading(false);
       return;
     }
@@ -62,15 +58,18 @@ function HomePage() {
     }
 
     fetchProjects();
-  }, [session]);
+  }, [isLoaded, isSignedIn]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promptInput.trim() || submitting) return;
 
-    if (!session) {
-      alert('Please sign in to create a project');
-      return;
+    if (!isSignedIn) {
+        // Trigger Clerk sign in
+        const signInBtn = document.querySelector('.cl-signInButton') as HTMLElement;
+        if(signInBtn) signInBtn.click();
+        else alert('Please sign in to create a project');
+        return;
     }
 
     setSubmitting(true);
@@ -230,13 +229,13 @@ function HomePage() {
       </main>
 
       {/* Projects Section */}
-      {session && (
+      {isSignedIn && (
         <section className="relative z-10 w-full px-6 pb-12">
           <div className="max-w-7xl mx-auto">
             <div className="glass-dark rounded-2xl p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-semibold text-white flex items-center gap-3">
-                  {session.user?.name ? `${session.user.name.split(' ')[0]}'s Lovable` : "Your Projects"}
+                  {user?.firstName ? `${user.firstName}'s Lovable` : "Your Projects"}
                 </h2>
               </div>
 

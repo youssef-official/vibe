@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@daytonaio/sdk": "^0.123.0",
     "clsx": "^2.1.1",
+    "dotenv": "^17.2.3",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.560.0",
     "next": "16.0.8",

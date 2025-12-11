@@ -1,20 +1,8 @@
 
 import { OpenAI } from "openai";
 
-// NOTE: This uses the MiniMax API via a compatible OpenAI client.
-// The user provided snippet suggests using `openai` package directly.
-// We need the API Key and Base URL.
-// Assuming the user will provide the API key in the environment variable MINIMAX_API_KEY.
-// And the base URL might be https://api.minimax.chat/v1 or https://api.minimax.io/v1
-// Based on the user's provided python snippet, it looks like a standard OpenAI client instantiation.
-// If it's a standard instantiation `client = OpenAI()`, it expects OPENAI_API_KEY.
-// But the model is "MiniMax-M2". This implies the user might have a proxy or the MiniMax API is OpenAI compatible and they set the base URL.
-// I will assume I need to configure the base URL to MiniMax's endpoint.
-// For now, I will use a placeholder or try to infer from common practices.
-// Search results mentioned https://api.minimax.chat/v1
-
 const client = new OpenAI({
-  apiKey: process.env.MINIMAX_API_KEY || "dummy-key",
+  apiKey: process.env.MINIMAX_API_KEY,
   baseURL: "https://api.minimax.chat/v1",
 });
 
@@ -29,7 +17,7 @@ export async function POST(req: Request) {
     const stream = await client.chat.completions.create({
       model: "MiniMax-M2",
       messages: [
-        { role: "system", content: "You are an expert full-stack developer. You build React applications using Next.js and Tailwind CSS. You are helpful and precise." },
+        { role: "system", content: "You are an expert full-stack developer. You build React applications using Next.js and Tailwind CSS. You are helpful and precise. When asked to create an app, provide the code within ```tsx block." },
         { role: "user", content: prompt },
       ],
       stream: true,

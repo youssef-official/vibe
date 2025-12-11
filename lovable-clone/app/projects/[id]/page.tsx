@@ -9,12 +9,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const prompt = searchParams.get("prompt");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
-  const [status, setStatus] = useState<"idle" | "thinking" | "coding" | "completed">("idle");
+  const [status, setStatus] = useState<"idle" | "thinking" | "coding" | "running" | "completed">("idle");
   const [generatedCode, setGeneratedCode] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [currentAction, setCurrentAction] = useState("");
-  const [fileSystem, setFileSystem] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
+  const [daytonaResult, setDaytonaResult] = useState<{ output: string; exitCode: number } | null>(null);
 
   const initialized = useRef(false);
 
@@ -42,6 +42,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let fullCode = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -54,22 +55,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = JSON.parse(line.slice(6));
-
-            // Handle reasoning/thinking
-            // Adjust based on actual API response structure for MiniMax
-            // The prompt said: response.choices[0].message.reasoning_details[0]['text']
-            // In streaming, we might see it in delta.
-
-            // Mocking the behavior if structure is standard OpenAI
             const delta = data.choices?.[0]?.delta;
             const finishReason = data.choices?.[0]?.finish_reason;
 
             if (delta) {
-              // Try to find reasoning content
-              // Some providers send it in `reasoning_content` or similar
-              // Or purely in the `content` if it's mixed (unlikely with reasoning_split=True)
-              // But we can check for custom fields.
-
               const reasoningText = (delta as any).reasoning_content || (delta as any).reasoning_details?.[0]?.text;
 
               if (reasoningText) {
@@ -81,18 +70,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               if (delta.content) {
                 setStatus("coding");
                 setGeneratedCode((prev) => prev + delta.content);
+                fullCode += delta.content;
                 setCurrentAction("Writing code...");
               }
             }
 
             if (finishReason === "stop") {
-                setStatus("completed");
-                setCurrentAction("Completed");
-                // Here we would parse the code to fileSystem
-                // For now, let's just pretend we parsed it into an index.tsx
-                setFileSystem({
-                    "index.tsx": generatedCode + delta?.content || ""
-                });
+                await runInDaytona(fullCode);
             }
           }
         }
@@ -103,7 +87,34 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     }
   };
 
-  // Extract code block for preview if possible
+  const runInDaytona = async (code: string) => {
+      setStatus("running");
+      setCurrentAction("Running in Daytona Sandbox...");
+
+      try {
+          // Extract the code block if present
+          const match = code.match(/```(?:tsx|typescript|js)?([\s\S]*?)```/);
+          const cleanCode = match ? match[1] : code;
+
+          const res = await fetch("/api/sandbox", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: cleanCode, language: 'typescript' })
+          });
+
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+
+          setDaytonaResult(data);
+          setStatus("completed");
+          setCurrentAction("Completed");
+      } catch (err) {
+          console.error("Daytona run failed", err);
+          setCurrentAction("Sandbox run failed");
+          setStatus("completed");
+      }
+  };
+
   const getPreviewCode = () => {
     const match = generatedCode.match(/```(?:tsx|jsx|javascript|react)?([\s\S]*?)```/);
     return match ? match[1] : generatedCode;
@@ -139,8 +150,23 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 <SparklesIcon className="w-3 h-3" />
                                 Thinking Process
                              </div>
-                             <div className="opacity-90 whitespace-pre-wrap text-xs font-mono">
+                             <div className="opacity-90 whitespace-pre-wrap text-xs font-mono max-h-60 overflow-y-auto">
                                  {reasoning}
+                             </div>
+                        </div>
+                    )}
+
+                    {daytonaResult && (
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm text-green-600">
+                            <div className="font-semibold mb-1 flex items-center gap-2">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Daytona Sandbox Output
+                            </div>
+                             <div className="opacity-90 whitespace-pre-wrap text-xs font-mono">
+                                 {daytonaResult.output || "No output"}
+                                 {daytonaResult.exitCode !== 0 && (
+                                     <span className="text-red-500 block mt-1">Exit Code: {daytonaResult.exitCode}</span>
+                                 )}
                              </div>
                         </div>
                     )}
@@ -181,10 +207,17 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
              </div>
 
              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-green-600 border border-green-500/20">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                    Daytona Sandbox Active
-                 </div>
+                 {status === "running" ? (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 border border-yellow-500/20">
+                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
+                        Starting Sandbox...
+                     </div>
+                 ) : (
+                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-green-600 border border-green-500/20">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                        Daytona Sandbox Active
+                     </div>
+                 )}
              </div>
          </div>
 
@@ -193,10 +226,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                  <div className="w-full h-full flex items-center justify-center">
                     <div className="w-full h-full bg-white relative overflow-auto">
                         {/* Mock Browser UI */}
-                        {status === "completed" || generatedCode.length > 50 ? (
+                        {generatedCode.length > 50 ? (
                             <div className="p-8">
                                 <h1 className="text-2xl font-bold mb-4">Generated App Preview</h1>
-                                <p className="text-gray-600 mb-4">The code has been generated. In a real environment, this would render the React app.</p>
+                                <p className="text-gray-600 mb-4">In a real production environment, this preview would render the component live.</p>
                                 <div className="border rounded p-4 bg-gray-50">
                                     <pre className="text-xs overflow-auto max-h-[500px]">
                                         {getPreviewCode()}
@@ -223,7 +256,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
              <div className="flex items-center gap-4">
                  <span className="flex items-center gap-1.5">
                      <Terminal className="w-3 h-3" />
-                     Terminals: Ready
+                     Terminals: {daytonaResult ? 'Executed' : 'Ready'}
                  </span>
                  <span className="flex items-center gap-1.5">
                      <Layout className="w-3 h-3" />

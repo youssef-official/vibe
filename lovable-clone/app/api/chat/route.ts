@@ -4,7 +4,7 @@ import { OpenAI } from "openai";
 // Using MiniMax API with OpenAI compatibility
 const client = new OpenAI({
   apiKey: process.env.MINIMAX_API_KEY || "dummy-key-for-build", // Fallback for build time if env is missing
-  baseURL: "https://api.minimax.chat/v1",
+  baseURL: "https://api.minimax.io/v1",
 });
 
 export async function POST(req: Request) {
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
         "Connection": "keep-alive",
       },
     });
-  } catch (error: any) {
+  } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
     console.error("Error calling MiniMax:", error);
     return new Response(JSON.stringify({ error: error.message || "Failed to generate response" }), {
       status: 500,

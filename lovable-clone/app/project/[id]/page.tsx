@@ -1,10 +1,9 @@
 
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Code, Eye, Sparkles, Copy, Check } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 import { useParams } from 'next/navigation';
 
@@ -12,6 +11,7 @@ export default function ProjectPage() {
   const params = useParams();
   const id = params?.id as string;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('code');
@@ -23,6 +23,7 @@ export default function ProjectPage() {
         const res = await fetch('/api/projects');
         if (res.ok) {
           const data = await res.json();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const found = data.projects.find((p: any) => p.id === id);
           if (found) {
             setProject(found);

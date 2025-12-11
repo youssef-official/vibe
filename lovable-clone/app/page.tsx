@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { UserButton } from '@/components/UserButton';
-import { Sparkles, ArrowRight, Grid2X2, Clock, Loader2 } from 'lucide-react';
+import { ArrowRight, Grid2X2, Clock, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -13,8 +13,8 @@ function HomePage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
   const [promptInput, setPromptInput] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -73,7 +73,6 @@ function HomePage() {
     }
 
     setSubmitting(true);
-    setLoading(true);
 
     try {
       const res = await fetch('/api/projects', {
@@ -100,7 +99,6 @@ function HomePage() {
       const message = error instanceof Error ? error.message : 'Failed to create project. Please try again.';
       alert(message);
       setSubmitting(false);
-      setLoading(false);
     }
   };
 

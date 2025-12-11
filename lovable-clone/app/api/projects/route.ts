@@ -4,24 +4,23 @@ import { OpenAI } from "openai";
 import { auth } from '@clerk/nextjs/server';
 
 // Initialize OpenAI client with Minimax configuration
-// Using OpenAI compatible endpoint as requested: https://platform.minimax.io/docs/api-reference/text-openai-api
+// Using OpenAI compatible endpoint: https://api.minimax.io/v1
+// Note: Some users might need https://api.minimaxi.com/v1 (CN) or https://api.minimax.chat/v1
+// The most standard for international use is api.minimax.io
 const client = new OpenAI({
   apiKey: process.env.MINIMAX_API_KEY,
-  baseURL: "https://api.minimax.chat/v1", // Standard Minimax OpenAI compatible endpoint
+  baseURL: "https://api.minimax.io/v1",
 });
 
-// In-memory store for projects (since we don't have a DB)
-// Note: In a real app with serverless functions, this will be reset frequently.
-// Ideally use a database. For this demo, we assume a persistent process or accept data loss on restart.
-// We'll export it so it persists slightly better in dev if the file isn't reloaded, but usually it is.
-// A global variable might work better for dev.
+// In-memory store for projects
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   var _projects: any[];
 }
 if (!global._projects) {
   global._projects = [];
 }
-let projects = global._projects;
+const projects = global._projects;
 
 export async function POST(req: Request) {
   try {
@@ -33,7 +32,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, description, prompt, model } = body;
 
-    console.log(`Generating project with model: ${model || 'MiniMax-M2'} for prompt: ${prompt}`);
+    // Map 'minimax' or 'MiniMax-M2' to the actual model ID
+    // Based on docs: "MiniMax-M2" is the model ID for the M2 model via OpenAI SDK.
+    const selectedModel = (model === 'minimax' || !model) ? 'MiniMax-M2' : model;
+
+    console.log(`Generating project with model: ${selectedModel} for prompt: ${prompt}`);
+
+    if (!process.env.MINIMAX_API_KEY) {
+        throw new Error("MINIMAX_API_KEY is missing in environment variables.");
+    }
 
     const systemPrompt = `You are an expert React software engineer.
     Your task is to generate a professional, single-file React component using Tailwind CSS.
@@ -49,63 +56,66 @@ export async function POST(req: Request) {
     Use 'lucide-react' for icons if needed.
     `;
 
-    // Minimax OpenAI compatible call
-    // User requested MiniMax-M2. The frontend sends 'minimax' which we map here.
-    const selectedModel = model === 'minimax' ? 'MiniMax-Text-01' : model;
-    // Note: If the API supports "MiniMax-M2" directly, use that.
-    // However, usually "MiniMax-Text-01" or "abab6.5s-chat" is the mapping.
-    // The user specifically asked for "MiniMax-M2" model name in the prompt description.
-    // Let's try to use "MiniMax-Text-01" as a safe proxy for M2 capabilities as described.
-
-    const completion = await client.chat.completions.create({
-      model: "MiniMax-Text-01",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 2000,
-      response_format: { type: "json_object" } // Try JSON mode if supported, otherwise I'll parse text
-    });
-
-    const content = completion.choices[0]?.message?.content || "";
-    let generatedCode = "";
-    let explanation = "";
-
     try {
-        const json = JSON.parse(content);
-        generatedCode = json.code;
-        explanation = json.explanation;
-    } catch (e) {
-        // Fallback if not valid JSON
-        console.warn("Failed to parse JSON response, using raw text");
-        generatedCode = content;
-        explanation = "Generated code";
+        const completion = await client.chat.completions.create({
+          model: selectedModel,
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000,
+          response_format: { type: "json_object" }
+        });
+
+        const content = completion.choices[0]?.message?.content || "";
+        let generatedCode = "";
+        let explanation = "";
+
+        try {
+            const json = JSON.parse(content);
+            generatedCode = json.code;
+            explanation = json.explanation;
+        } catch {
+            console.warn("Failed to parse JSON response, using raw text");
+            generatedCode = content;
+            explanation = "Generated code (parsing failed)";
+        }
+
+        const id = Math.random().toString(36).substring(7);
+        const newProject = {
+          id,
+          userId,
+          name,
+          description,
+          prompt,
+          model: selectedModel,
+          updated_at: new Date().toISOString(),
+          code: generatedCode,
+          explanation
+        };
+
+        projects.unshift(newProject);
+
+        return NextResponse.json(newProject);
+
+    } catch (apiError: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+        console.error('Minimax API Error:', apiError);
+        // Return the specific API error to the client for debugging
+        return NextResponse.json({
+            error: 'AI Generation Failed',
+            details: apiError.message || 'Unknown error from Minimax API',
+            code: apiError.status || 500
+        }, { status: apiError.status || 500 });
     }
 
-    const id = Math.random().toString(36).substring(7);
-    const newProject = {
-      id,
-      userId,
-      name,
-      description,
-      prompt,
-      model,
-      updated_at: new Date().toISOString(),
-      code: generatedCode,
-      explanation
-    };
-
-    projects.unshift(newProject);
-
-    return NextResponse.json(newProject);
-  } catch (error: any) {
+  } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
     console.error('Error creating project:', error);
     return NextResponse.json({
         error: 'Internal Server Error',
@@ -114,13 +124,13 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   const { userId } = await auth();
   if (!userId) {
       return NextResponse.json({ projects: [] });
   }
 
-  // Filter by user
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userProjects = projects.filter((p: any) => p.userId === userId);
   return NextResponse.json({ projects: userProjects });
 }

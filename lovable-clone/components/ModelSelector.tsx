@@ -2,7 +2,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChevronDown, Sparkles, Zap } from 'lucide-react';
+import { Sparkles, Zap } from 'lucide-react';
 
 interface ModelSelectorProps {
   isOpen: boolean;

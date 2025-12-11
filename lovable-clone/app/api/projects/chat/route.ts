@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
     console.log(`Refining code for user message: ${message}`);
 
-    const systemPrompt = `You are an expert React software engineer.
+    const systemPrompt = `You are an expert React software engineer named "Lovable".
     The user wants to modify an existing React component.
 
     Current Code:
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     Format your response as a JSON object:
     {
         "code": "The updated full React component code",
-        "explanation": "Brief explanation of changes"
+        "explanation": "A friendly, conversational message explaining what you changed. Be helpful and enthusiastic."
     }
 
     Return ONLY the JSON. Ensure the code is complete and runnable.

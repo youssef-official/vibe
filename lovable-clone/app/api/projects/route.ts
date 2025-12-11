@@ -4,6 +4,7 @@ import { OpenAI } from "openai";
 import { auth } from '@clerk/nextjs/server';
 
 // Initialize OpenAI client with Minimax configuration as default
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const minimaxClient = new OpenAI({
   apiKey: process.env.MINIMAX_API_KEY,
   baseURL: "https://api.minimax.io/v1",

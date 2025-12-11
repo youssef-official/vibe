@@ -34,18 +34,28 @@ export async function POST(req: Request) {
         selectedModel = (model === 'minimax' || !model) ? 'MiniMax-M2' : model;
     }
 
-    const systemPrompt = `You are an expert React software engineer.
-    Your task is to generate a professional, single-file React component using Tailwind CSS.
-    The component should meet the user's requirements exactly.
+    const systemPrompt = `You are an expert React software engineer named "Lovable".
+    Your task is to generate a professional React application using Tailwind CSS.
 
-    Format your response as a JSON object with the following structure:
+    You must output a JSON object containing the files for the project.
+    Do NOT just output a single file unless requested.
+
+    Format:
     {
-        "code": "The full React component code starting with imports",
-        "explanation": "A brief explanation of what you built"
+        "files": {
+            "App.tsx": "...",
+            "components/Header.tsx": "...",
+            "styles.css": "..."
+        },
+        "explanation": "Brief summary of what you built."
     }
 
-    Ensure the code is complete, error-free, and ready to render.
-    Use 'lucide-react' for icons if needed.
+    CRITICAL:
+    1. The entry point is usually 'App.tsx'.
+    2. Use 'lucide-react' for icons.
+    3. Ensure code is complete and production-ready.
+    4. Do NOT use markdown code fences in the JSON values.
+    5. Return ONLY the JSON object.
     `;
 
     // Create a streaming response
@@ -61,17 +71,12 @@ export async function POST(req: Request) {
               ],
               temperature: 0.7,
               max_tokens: 4000,
-              stream: true, // STREAMING
+              stream: true,
             });
 
             for await (const chunk of completion) {
                 const content = chunk.choices[0]?.delta?.content;
                 if (content) {
-                    // We can optionally stream the raw content, but since we need to parse JSON,
-                    // we might need to buffer or send partial updates.
-                    // However, standard "streaming" usually just sends text chunks.
-                    // The client can try to display "Thinking..." or accumulate.
-                    // For now, let's stream the raw chunks so the client shows *something* happening.
                     controller.enqueue(encoder.encode(content));
                 }
             }

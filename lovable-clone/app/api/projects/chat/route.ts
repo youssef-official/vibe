@@ -24,31 +24,34 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { message, currentCode, history } = body;
+    const { message, currentFiles, history } = body;
 
     console.log(`Refining code for user message: ${message}`);
 
     const systemPrompt = `You are an expert React software engineer named "Lovable".
-    The user wants to modify an existing React component.
+    The user wants to modify an existing React project.
 
-    Current Code:
-    ${currentCode}
+    Current Files:
+    ${JSON.stringify(currentFiles, null, 2)}
 
-    Your task is to update the code based on the user's request.
-    Maintain the single-file structure and Tailwind CSS styling.
+    Your task is to update the files based on the user's request.
 
     Format your response as a JSON object:
     {
-        "code": "The updated full React component code",
+        "files": {
+            "App.tsx": "...",
+            "components/NewComponent.tsx": "..."
+        },
         "explanation": "A friendly, conversational message explaining what you changed. Be helpful and enthusiastic."
     }
 
-    Return ONLY the JSON. Ensure the code is complete and runnable.
+    CRITICAL:
+    1. Return the FULL content of any file you modify.
+    2. Return ONLY the JSON object.
+    3. Do not assume single-file structure anymore.
     `;
 
     // Construct conversation history for context
-    // We limit history to avoid token limits, but for M2 it should be fine.
-    // We'll take the last few messages.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recentHistory = history.slice(-6).map((msg: any) => ({
         role: msg.role === 'assistant' ? 'assistant' : 'user',
@@ -62,31 +65,28 @@ export async function POST(req: Request) {
         ...recentHistory,
         { role: "user", content: message }
       ],
-      temperature: 0.5, // Lower temp for code modification
+      temperature: 0.5,
       max_tokens: 4000,
     });
 
     const content = completion.choices[0]?.message?.content || "";
     const cleanedContent = cleanResponse(content);
 
-    let generatedCode = currentCode;
+    let generatedFiles = currentFiles;
     let explanation = "Updated code.";
 
     try {
         const json = JSON.parse(cleanedContent);
-        generatedCode = json.code;
+        // Merge new files with existing files
+        generatedFiles = { ...currentFiles, ...json.files };
         explanation = json.explanation;
     } catch {
-        console.warn("Failed to parse JSON response in chat, trying raw");
-        // If it looks like code, assume it's just code
-        if (cleanedContent.includes('export default function') || cleanedContent.includes('import React')) {
-            generatedCode = cleanedContent;
-            explanation = "Here is the updated code.";
-        }
+        console.warn("Failed to parse JSON response in chat");
+        explanation = "I made the changes, but there was an error parsing the response.";
     }
 
     return NextResponse.json({
-        code: generatedCode,
+        files: generatedFiles,
         explanation
     });
 

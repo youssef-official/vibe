@@ -1,30 +1,39 @@
 
 import { NextResponse } from 'next/server';
-import { OpenAI } from "openai";
 import { auth } from '@clerk/nextjs/server';
+import fs from 'fs';
+import path from 'path';
 
-// Initialize OpenAI client with Minimax configuration as default
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const minimaxClient = new OpenAI({
-  apiKey: process.env.MINIMAX_API_KEY,
-  baseURL: "https://api.minimax.io/v1",
-});
+// Define DB path
+const DB_PATH = path.join(process.cwd(), 'data', 'projects.json');
 
-// Initialize OpenAI/OpenRouter client (optional, if key exists)
-const openRouterClient = process.env.OPENROUTER_API_KEY ? new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-}) : null;
-
-// In-memory store for projects
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  var _projects: any[];
+// Ensure data directory exists
+if (!fs.existsSync(path.dirname(DB_PATH))) {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    fs.writeFileSync(DB_PATH, '[]');
 }
-if (!global._projects) {
-  global._projects = [];
+
+// Helper to read projects
+function getProjects() {
+    try {
+        if (!fs.existsSync(DB_PATH)) return [];
+        const data = fs.readFileSync(DB_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error("Error reading projects DB:", error);
+        return [];
+    }
 }
-const projects = global._projects;
+
+// Helper to save projects
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function saveProjects(projects: any[]) {
+    try {
+        fs.writeFileSync(DB_PATH, JSON.stringify(projects, null, 2));
+    } catch (error) {
+        console.error("Error saving projects DB:", error);
+    }
+}
 
 export async function POST(req: Request) {
   try {
@@ -36,24 +45,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, description, prompt, model } = body;
 
-    // Determine client and model
-    let selectedModel = 'MiniMax-M2';
-
-    if (model === 'openrouter') {
-        if (!openRouterClient) {
-            return NextResponse.json({ error: "OpenRouter is not configured" }, { status: 400 });
-        }
-        // Default OpenRouter model or pass specific one
-        selectedModel = 'anthropic/claude-3-opus'; // Example default, or let user pick
-    } else {
-        selectedModel = (model === 'minimax' || !model) ? 'MiniMax-M2' : model;
-    }
+    const selectedModel = (model === 'minimax' || !model) ? 'MiniMax-M2' : model;
 
     console.log(`Creating project placeholder with model: ${selectedModel} for prompt: ${prompt}`);
-
-    // Immediate project creation without waiting for generation
-    // The generation will be handled by the client via a separate stream endpoint
-    // to meet the "don't wait for code" requirement.
 
     const id = Math.random().toString(36).substring(7);
     const newProject = {
@@ -64,11 +58,13 @@ export async function POST(req: Request) {
       prompt,
       model: selectedModel,
       updated_at: new Date().toISOString(),
-      code: "", // Empty initially
+      files: {}, // Multi-file structure
       explanation: "Generating..."
     };
 
+    const projects = getProjects();
     projects.unshift(newProject);
+    saveProjects(projects);
 
     return NextResponse.json(newProject);
 
@@ -87,6 +83,7 @@ export async function GET() {
       return NextResponse.json({ projects: [] });
   }
 
+  const projects = getProjects();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userProjects = projects.filter((p: any) => p.userId === userId);
   return NextResponse.json({ projects: userProjects });

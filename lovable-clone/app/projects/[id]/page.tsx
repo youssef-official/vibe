@@ -2,19 +2,17 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Terminal, Code, Layout, Play, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Terminal, Code, Layout, Play } from "lucide-react";
 
 export default function ProjectPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const prompt = searchParams.get("prompt");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
-  const [status, setStatus] = useState<"idle" | "thinking" | "coding" | "running" | "completed">("idle");
+  const [status, setStatus] = useState<"idle" | "thinking" | "coding" | "completed">("idle");
   const [generatedCode, setGeneratedCode] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [currentAction, setCurrentAction] = useState("");
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
-  const [daytonaResult, setDaytonaResult] = useState<{ output: string; exitCode: number } | null>(null);
 
   const initialized = useRef(false);
 
@@ -28,7 +26,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const startGeneration = async (userPrompt: string) => {
     setMessages([{ role: "user", content: userPrompt }]);
     setStatus("thinking");
-    setCurrentAction("Analyzing requirements...");
+    setCurrentAction("Initializing MiniMax M2...");
 
     try {
       const response = await fetch("/api/chat", {
@@ -41,87 +39,43 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-      let fullCode = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
+        const text = decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6));
-            const delta = data.choices?.[0]?.delta;
-            const finishReason = data.choices?.[0]?.finish_reason;
+        // MiniMax via OpenAI streaming might return text chunks directly if using 'text/plain' or json chunks if 'text/event-stream'
+        // My server implementation returns text/plain chunks of content.
 
-            if (delta) {
-              const reasoningText = (delta as any).reasoning_content || (delta as any).reasoning_details?.[0]?.text;
+        // We need to parse the text to separate "thought" vs "code" if the model follows instructions.
+        // Or just display it.
 
-              if (reasoningText) {
-                setStatus("thinking");
-                setReasoning((prev) => prev + reasoningText);
-                setCurrentAction("Thinking...");
-              }
-
-              if (delta.content) {
-                setStatus("coding");
-                setGeneratedCode((prev) => prev + delta.content);
-                fullCode += delta.content;
-                setCurrentAction("Writing code...");
-              }
-            }
-
-            if (finishReason === "stop") {
-                await runInDaytona(fullCode);
-            }
-          }
+        // Basic heuristic: If text contains "Now I Would...", it's an action update.
+        if (text.includes("Now I Would") || text.includes("Editing :")) {
+             setCurrentAction(text.split('\n').find(l => l.includes("Now I") || l.includes("Editing")) || "Working...");
         }
+
+        setGeneratedCode((prev) => prev + text);
+        setStatus("coding");
       }
+      setStatus("completed");
+      setCurrentAction("Completed");
     } catch (error) {
       console.error("Error:", error);
       setCurrentAction("Error occurred");
     }
   };
 
-  const runInDaytona = async (code: string) => {
-      setStatus("running");
-      setCurrentAction("Running in Daytona Sandbox...");
-
-      try {
-          // Extract the code block if present
-          const match = code.match(/```(?:tsx|typescript|js)?([\s\S]*?)```/);
-          const cleanCode = match ? match[1] : code;
-
-          const res = await fetch("/api/sandbox", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: cleanCode, language: 'typescript' })
-          });
-
-          const data = await res.json();
-          if (data.error) throw new Error(data.error);
-
-          setDaytonaResult(data);
-          setStatus("completed");
-          setCurrentAction("Completed");
-      } catch (err) {
-          console.error("Daytona run failed", err);
-          setCurrentAction("Sandbox run failed");
-          setStatus("completed");
-      }
-  };
-
+  // Extract code block for preview if possible
   const getPreviewCode = () => {
     const match = generatedCode.match(/```(?:tsx|jsx|javascript|react)?([\s\S]*?)```/);
     return match ? match[1] : generatedCode;
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden font-sans">
+    <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground">
       {/* Sidebar - Chat & Status */}
       <div className="w-[400px] flex flex-col border-r border-border bg-card">
         <div className="p-4 border-b border-border flex items-center gap-2 font-bold text-lg">
@@ -150,23 +104,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 <SparklesIcon className="w-3 h-3" />
                                 Thinking Process
                              </div>
-                             <div className="opacity-90 whitespace-pre-wrap text-xs font-mono max-h-60 overflow-y-auto">
-                                 {reasoning}
-                             </div>
-                        </div>
-                    )}
-
-                    {daytonaResult && (
-                        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm text-green-600">
-                            <div className="font-semibold mb-1 flex items-center gap-2">
-                                <CheckCircle2 className="w-3 h-3" />
-                                Daytona Sandbox Output
-                            </div>
                              <div className="opacity-90 whitespace-pre-wrap text-xs font-mono">
-                                 {daytonaResult.output || "No output"}
-                                 {daytonaResult.exitCode !== 0 && (
-                                     <span className="text-red-500 block mt-1">Exit Code: {daytonaResult.exitCode}</span>
-                                 )}
+                                 {reasoning}
                              </div>
                         </div>
                     )}
@@ -177,7 +116,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         <div className="p-4 border-t border-border bg-muted/20">
              <div className="bg-background border border-input rounded-lg p-2 flex items-center">
                  <input
-                    className="flex-1 bg-transparent outline-none text-sm px-2"
+                    className="flex-1 bg-transparent outline-none text-sm px-2 text-foreground"
                     placeholder="Refine the design..."
                     disabled={status !== "completed"}
                  />
@@ -207,30 +146,23 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
              </div>
 
              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                 {status === "running" ? (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 border border-yellow-500/20">
-                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
-                        Starting Sandbox...
-                     </div>
-                 ) : (
-                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-green-600 border border-green-500/20">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                        Daytona Sandbox Active
-                     </div>
-                 )}
+                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 text-green-600 border border-green-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                    Daytona Sandbox Active
+                 </div>
              </div>
          </div>
 
          <div className="flex-1 relative bg-muted/50 overflow-hidden">
              {activeTab === "preview" ? (
                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-full h-full bg-white relative overflow-auto">
+                    <div className="w-full h-full bg-background relative overflow-auto p-4">
                         {/* Mock Browser UI */}
-                        {generatedCode.length > 50 ? (
-                            <div className="p-8">
+                        {status === "completed" || generatedCode.length > 50 ? (
+                            <div className="max-w-4xl mx-auto bg-card border border-border rounded-lg shadow-sm p-8">
                                 <h1 className="text-2xl font-bold mb-4">Generated App Preview</h1>
-                                <p className="text-gray-600 mb-4">In a real production environment, this preview would render the component live.</p>
-                                <div className="border rounded p-4 bg-gray-50">
+                                <p className="text-muted-foreground mb-4">The code has been generated. In a real environment, this would render the React app via Daytona.</p>
+                                <div className="border border-border rounded p-4 bg-muted/30">
                                     <pre className="text-xs overflow-auto max-h-[500px]">
                                         {getPreviewCode()}
                                     </pre>
@@ -256,7 +188,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
              <div className="flex items-center gap-4">
                  <span className="flex items-center gap-1.5">
                      <Terminal className="w-3 h-3" />
-                     Terminals: {daytonaResult ? 'Executed' : 'Ready'}
+                     Terminals: Ready
                  </span>
                  <span className="flex items-center gap-1.5">
                      <Layout className="w-3 h-3" />

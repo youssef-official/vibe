@@ -1,0 +1,24 @@
+
+> lovable-clone@0.1.0 dev
+> next dev
+
+   ▲ Next.js 16.0.8 (Turbopack)
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.0.2:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1096ms
+ ○ Compiling / ...
+ GET / 200 in 16.5s (compile: 16.1s, render: 405ms)
+ GET /projects/hqsl2m?prompt=Create+a+simple+todo+list+app+with+React 200 in 1716ms (compile: 1609ms, render: 107ms)
+Error calling MiniMax: SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at POST (app/api/chat/route.ts:19:34)
+  17 | export async function POST(req: Request) {
+  18 |   try {
+> 19 |     const { prompt } = await req.json();
+     |                                  ^
+  20 |
+  21 |     if (!prompt) {
+  22 |       return new Response("Prompt is required", { status: 400 });

@@ -336,8 +336,8 @@ export default function ProjectPage() {
                                 <div className={`flex max-w-[85%] flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                     <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                                         msg.role === 'user'
-                                            ? 'bg-[#27272a] text-white'
-                                            : 'bg-transparent text-white/90'
+                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                                            : 'bg-[#18181b] border border-white/10 text-white/90'
                                     }`}>
                                         {msg.content}
                                     </div>
@@ -371,7 +371,7 @@ export default function ProjectPage() {
                                 }
                             }}
                             placeholder="Ask follow-up questions or request changes..."
-                            className="min-h-[100px] w-full resize-none rounded-xl border-white/10 bg-[#18181b] p-4 pr-12 text-sm text-white placeholder:text-white/30 focus-visible:ring-blue-500/50"
+                          className="min-h-[50px] w-full resize-none rounded-xl border-white/10 bg-[#18181b] p-4 pr-12 text-sm text-white placeholder:text-white/30 focus-visible:ring-blue-500/50 transition-all duration-300" transition-all duration-300"
                         />
                         <button
                             type="submit"

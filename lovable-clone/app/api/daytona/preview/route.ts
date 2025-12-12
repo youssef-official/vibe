@@ -3,7 +3,7 @@ import { Daytona } from '@daytonaio/sdk';
 
 // Initialize Daytona Client
 // The client will automatically pick up the DAYTONA_API_KEY from the environment variables
-const daytonaClient = new Daytona({});
+const daytonaClient = new Daytona({ organizationId: process.env.DAYTONA_ORGANIZATION_ID });
 
 // A simple in-memory store to map file hashes to sandbox IDs
 // In a real application, this should be a persistent database

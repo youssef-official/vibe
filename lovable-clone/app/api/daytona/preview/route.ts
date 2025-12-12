@@ -45,10 +45,14 @@ export async function POST(request: Request) {
 
     // 2. Create a new sandbox if we don't have an ID or retrieval failed
     if (!sandboxId) {
-      console.log(`[Daytona] Creating new sandbox for hash: ${filesHash.substring(0, 8)}`);
+      // Append random string to ensure name uniqueness in case of collisions
+      const uniqueSuffix = Math.random().toString(36).substring(2, 7);
+      const sandboxName = `vibe-project-${filesHash.substring(0, 8)}-${uniqueSuffix}`;
+
+      console.log(`[Daytona] Creating new sandbox: ${sandboxName}`);
       try {
           sandbox = await daytonaClient.create({
-            name: `vibe-project-${filesHash.substring(0, 8)}`,
+            name: sandboxName,
             language: 'typescript',
           });
           sandboxId = sandbox.id;
@@ -56,7 +60,8 @@ export async function POST(request: Request) {
           console.log(`[Daytona] Sandbox created: ${sandboxId}`);
       } catch (err) {
           console.error('[Daytona] Failed to create sandbox:', err);
-          return NextResponse.json({ error: 'Failed to create sandbox environment' }, { status: 500 });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return NextResponse.json({ error: 'Failed to create sandbox environment', details: (err as any).message }, { status: 500 });
       }
     }
 
@@ -65,21 +70,15 @@ export async function POST(request: Request) {
     }
 
     // Ensure sandbox is fully started before operations
-    // We try to wait, but if it takes too long, we might need to let the client retry.
     if (sandbox.state !== 'started') {
         console.log(`[Daytona] Waiting for sandbox ${sandboxId} to be started...`);
         try {
             // Wait up to 20 seconds. If it takes longer, we might return a "Still Starting" status
-            // Note: waitUntilStarted signature depends on SDK. Assuming it takes timeout or we race it.
-            // The SDK's waitUntilStarted usually has a default timeout (e.g. 60s).
-            // We can wrap it in a race with a local timeout to return early.
-
             const waitPromise = sandbox.waitUntilStarted();
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 20000));
 
             await Promise.race([waitPromise, timeoutPromise]);
         } catch (err) {
-            // If it timed out, return 202 to tell client to retry
              console.log('[Daytona] Sandbox start timed out or taking long, asking client to retry...');
              return NextResponse.json({ status: 'starting', message: 'Sandbox is initializing...' }, { status: 202 });
         }
@@ -95,8 +94,8 @@ export async function POST(request: Request) {
         await sandbox.fs.uploadFiles(fileUploads);
     } catch (err) {
         console.error('[Daytona] File upload failed:', err);
-        // If upload fails, maybe sandbox crashed or is not ready?
-        return NextResponse.json({ error: 'Failed to upload files to sandbox' }, { status: 500 });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return NextResponse.json({ error: 'Failed to upload files to sandbox', details: (err as any).message }, { status: 500 });
     }
 
     // Install dependencies and run the project
@@ -119,7 +118,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ previewUrl });
     } catch (err) {
          console.error('[Daytona] Failed to get preview link:', err);
-         return NextResponse.json({ error: 'Failed to generate preview URL' }, { status: 500 });
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         return NextResponse.json({ error: 'Failed to generate preview URL', details: (err as any).message }, { status: 500 });
     }
 
   } catch (error) {

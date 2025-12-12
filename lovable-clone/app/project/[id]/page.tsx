@@ -385,8 +385,7 @@ export default function ProjectPage() {
                 </div>
             </div>
 
-            {/* Right Area: Sandpack */}
-            <div className={`flex-1 flex flex-col overflow-hidden{/* Right Area: Code/Preview */}
+            {/* Right Area: Code/Preview */}
             <div className="flex-1 flex flex-col overflow-hidden bg-[#0f0f0f] relative">
                 {/* The image shows a full-screen preview area, with the chat on the left.
                     The header has tabs for 'code' and 'preview'.
@@ -398,11 +397,6 @@ export default function ProjectPage() {
                 {activeTab === 'code' && (
                     <CodeEditor files={project?.files || {}} />
                 )}
-            </div>ode/Preview).
-
-                   I'll pass the files to SandpackClient.
-                */}
-                <SandpackClient files={project?.files || {}} viewMode={activeTab === 'code' ? 'code' : 'preview'} />
             </div>
         </div>
     </div>

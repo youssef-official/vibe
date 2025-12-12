@@ -22,10 +22,11 @@ export async function POST(request: Request) {
     }
 
     let sandboxId: string | undefined = sandboxCache.get(filesHash);
+    let sandbox;
 
     if (!sandboxId) {
       // 1. Create a new sandbox
-      const sandbox = await daytonaClient.create({
+      sandbox = await daytonaClient.create({
         name: `vibe-project-${filesHash.substring(0, 8)}`,
         // Assuming a simple Node.js/React template for the generated code
         language: 'typescript', 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     } else {
         // 2. Check if the sandbox is still running and update it
         try {
-            await daytonaClient.get(sandboxId);
+            sandbox = await daytonaClient.get(sandboxId);
         } catch (e) {
             // Sandbox not found or stopped, create a new one
             sandboxCache.delete(filesHash);
@@ -44,15 +45,14 @@ export async function POST(request: Request) {
     }
 
 // 3. Synchronize files to the sandbox using a single update call
-	// This is the correct method for the latest Daytona SDK to update files in bulk.
-	await daytonaClient.update({
-	    sandboxId,
+	// The sandbox object should now be available from either creation or retrieval.
+	await sandbox.update({
 	    files: files as Record<string, string>,
 	});
 
     // 4. Get the preview URL for the running service (e.g., port 3000 for React)
     // This is the critical part that replaces Sandpack's built-in preview.
-    const sandbox = await daytonaClient.get(sandboxId);
+    // The sandbox object is already available from step 1 or 2.
     const previewLink = await sandbox.getPreviewLink(3000);
     const previewUrl = previewLink.url;
 

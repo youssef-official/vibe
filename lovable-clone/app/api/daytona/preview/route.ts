@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Daytona, PortPreviewUrl } from '@daytonaio/sdk';
+import { Daytona } from '@daytonaio/sdk';
 
 // Initialize Daytona Client
 // The client will automatically pick up the DAYTONA_API_KEY from the environment variables

@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
     // 2. Create a new sandbox if we don't have an ID or retrieval failed
     if (!sandboxId) {
+      console.log('Creating new sandbox for hash:', filesHash);
       sandbox = await daytonaClient.create({
         name: `vibe-project-${filesHash.substring(0, 8)}`,
         // Assuming a simple Node.js/React template for the generated code
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Daytona API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error during Daytona operation' }, { status: 500 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return NextResponse.json({ error: 'Internal Server Error during Daytona operation', details: (error as any).message }, { status: 500 });
   }
 }

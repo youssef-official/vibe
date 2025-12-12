@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { Daytona } from '@daytonaio/sdk';
 
+// Allow up to 60 seconds for this route (if supported by hosting platform)
+export const maxDuration = 60;
+
 // A simple in-memory store to map file hashes to sandbox IDs
 // In a real application, this should be a persistent database
 const sandboxCache = new Map<string, string>();
@@ -17,7 +20,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'DAYTONA_API_KEY is not set' }, { status: 500 });
     }
 
-    // Initialize Daytona Client inside the handler to ensure env vars are available
     const daytonaClient = new Daytona({ organizationId: process.env.DAYTONA_ORGANIZATION_ID });
 
     let sandboxId: string | undefined = sandboxCache.get(filesHash);
@@ -44,14 +46,18 @@ export async function POST(request: Request) {
     // 2. Create a new sandbox if we don't have an ID or retrieval failed
     if (!sandboxId) {
       console.log(`[Daytona] Creating new sandbox for hash: ${filesHash.substring(0, 8)}`);
-      // Use 'typescript' language which should provide a Node.js environment
-      sandbox = await daytonaClient.create({
-        name: `vibe-project-${filesHash.substring(0, 8)}`,
-        language: 'typescript', 
-      });
-      sandboxId = sandbox.id;
-      sandboxCache.set(filesHash, sandboxId);
-      console.log(`[Daytona] Sandbox created: ${sandboxId}`);
+      try {
+          sandbox = await daytonaClient.create({
+            name: `vibe-project-${filesHash.substring(0, 8)}`,
+            language: 'typescript',
+          });
+          sandboxId = sandbox.id;
+          sandboxCache.set(filesHash, sandboxId);
+          console.log(`[Daytona] Sandbox created: ${sandboxId}`);
+      } catch (err) {
+          console.error('[Daytona] Failed to create sandbox:', err);
+          return NextResponse.json({ error: 'Failed to create sandbox environment' }, { status: 500 });
+      }
     }
 
     if (!sandbox) {
@@ -59,38 +65,62 @@ export async function POST(request: Request) {
     }
 
     // Ensure sandbox is fully started before operations
-    console.log(`[Daytona] Waiting for sandbox ${sandboxId} to be started...`);
-    await sandbox.waitUntilStarted();
+    // We try to wait, but if it takes too long, we might need to let the client retry.
+    if (sandbox.state !== 'started') {
+        console.log(`[Daytona] Waiting for sandbox ${sandboxId} to be started...`);
+        try {
+            // Wait up to 20 seconds. If it takes longer, we might return a "Still Starting" status
+            // Note: waitUntilStarted signature depends on SDK. Assuming it takes timeout or we race it.
+            // The SDK's waitUntilStarted usually has a default timeout (e.g. 60s).
+            // We can wrap it in a race with a local timeout to return early.
 
-    // 3. Synchronize files to the sandbox using a single update call
+            const waitPromise = sandbox.waitUntilStarted();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 20000));
+
+            await Promise.race([waitPromise, timeoutPromise]);
+        } catch (err) {
+            // If it timed out, return 202 to tell client to retry
+             console.log('[Daytona] Sandbox start timed out or taking long, asking client to retry...');
+             return NextResponse.json({ status: 'starting', message: 'Sandbox is initializing...' }, { status: 202 });
+        }
+    }
+
+    // 3. Synchronize files
     console.log(`[Daytona] Uploading ${Object.keys(files).length} files to sandbox...`);
-    const fileUploads = Object.entries(files as Record<string, string>).map(([path, content]) => ({
-      source: Buffer.from(content),
-      destination: path
-    }));
-    await sandbox.fs.uploadFiles(fileUploads);
+    try {
+        const fileUploads = Object.entries(files as Record<string, string>).map(([path, content]) => ({
+          source: Buffer.from(content),
+          destination: path
+        }));
+        await sandbox.fs.uploadFiles(fileUploads);
+    } catch (err) {
+        console.error('[Daytona] File upload failed:', err);
+        // If upload fails, maybe sandbox crashed or is not ready?
+        return NextResponse.json({ error: 'Failed to upload files to sandbox' }, { status: 500 });
+    }
 
-    // Install dependencies and run the project if it's a new sandbox or files changed significantly
+    // Install dependencies and run the project
     if (files['package.json']) {
          console.log('[Daytona] Triggering background npm install and start...');
          try {
-             // Run npm install and npm run dev in background to avoid timeout
-             // Using (cmd1 && cmd2) > log 2>&1 & pattern
+             // Run npm install and npm run dev in background
              await sandbox.process.executeCommand('(npm install && npm run dev) > server.log 2>&1 &');
          } catch (err) {
              console.error('[Daytona] Failed to trigger background command:', err);
-             // Verify if it's just a "command started" message or actual error.
-             // Usually executeCommand throws if the request fails, but here we expect it to succeed quickly.
          }
     }
 
-    // 4. Get the preview URL for the running service (e.g., port 3000 for React)
+    // 4. Get the preview URL
     console.log(`[Daytona] Getting preview link for port 3000...`);
-    const previewLink = await sandbox.getPreviewLink(3000);
-    const previewUrl = previewLink.url;
-    console.log(`[Daytona] Preview URL: ${previewUrl}`);
-
-    return NextResponse.json({ previewUrl });
+    try {
+        const previewLink = await sandbox.getPreviewLink(3000);
+        const previewUrl = previewLink.url;
+        console.log(`[Daytona] Preview URL: ${previewUrl}`);
+        return NextResponse.json({ previewUrl });
+    } catch (err) {
+         console.error('[Daytona] Failed to get preview link:', err);
+         return NextResponse.json({ error: 'Failed to generate preview URL' }, { status: 500 });
+    }
 
   } catch (error) {
     console.error('Daytona API Error:', error);

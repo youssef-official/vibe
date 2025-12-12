@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface DaytonaPreviewProps {
@@ -11,7 +11,10 @@ interface DaytonaPreviewProps {
 export default function DaytonaPreview({ files }: DaytonaPreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusMsg, setStatusMsg] = useState('Initializing environment...');
   const [error, setError] = useState<string | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
   // A unique ID based on the files content to trigger re-generation/re-fetch
   const filesHash = useMemo(() => {
@@ -19,12 +22,20 @@ export default function DaytonaPreview({ files }: DaytonaPreviewProps) {
   }, [files]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     const fetchPreviewUrl = async () => {
+      if (!mountedRef.current) return;
+
       setLoading(true);
       setError(null);
-      // Keep previous previewUrl while loading new one to avoid flicker if desired,
-      // but for now clearing it to show loading state is safer to indicate activity.
-      // setPreviewUrl(null);
+      setStatusMsg('Initializing environment...');
 
       if (Object.keys(files).length === 0) {
         setLoading(false);
@@ -38,20 +49,39 @@ export default function DaytonaPreview({ files }: DaytonaPreviewProps) {
           body: JSON.stringify({ files: files, filesHash: filesHash }),
         });
 
+        if (response.status === 202) {
+             // Sandbox is starting, retry after delay
+             const data = await response.json();
+             setStatusMsg(data.message || 'Sandbox starting...');
+
+             // Retry in 3 seconds
+             retryTimeoutRef.current = setTimeout(() => {
+                 fetchPreviewUrl();
+             }, 3000);
+             return;
+        }
+
         if (!response.ok) {
            const errorData = await response.json();
            throw new Error(errorData.error || 'Failed to get Daytona preview URL');
         }
 
         const data = await response.json();
-        setPreviewUrl(data.previewUrl);
+        if (mountedRef.current) {
+            setPreviewUrl(data.previewUrl);
+            setLoading(false);
+        }
       } catch (err) {
         console.error('Daytona Preview Error:', err);
-        setError('Preview unavailable.');
-      } finally {
-        setLoading(false);
+        if (mountedRef.current) {
+             setError('Preview unavailable. Please try again.');
+             setLoading(false);
+        }
       }
     };
+
+    // Clear any pending retries when hash changes
+    if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
 
     fetchPreviewUrl();
   }, [filesHash, files]);
@@ -67,16 +97,12 @@ export default function DaytonaPreview({ files }: DaytonaPreviewProps) {
     );
   }
 
-  // If we have a URL, show it even if "loading" is true (re-generating in background?)
-  // Actually, Daytona might need a fresh URL.
-  // For now, simple state:
-
   if (loading && !previewUrl) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-3">
             <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-            <p className="text-sm text-gray-500 font-medium">Starting Preview Environment...</p>
+            <p className="text-sm text-gray-500 font-medium">{statusMsg}</p>
         </div>
       </div>
     );
@@ -88,6 +114,12 @@ export default function DaytonaPreview({ files }: DaytonaPreviewProps) {
         <div className="text-center max-w-md px-4">
              <p className="font-medium mb-1">Preview Error</p>
              <p className="text-xs opacity-80">{error}</p>
+             <button
+                onClick={() => window.location.reload()} // Or trigger re-fetch cleaner
+                className="mt-3 text-xs underline opacity-60 hover:opacity-100"
+             >
+                Reload
+             </button>
         </div>
       </div>
     );

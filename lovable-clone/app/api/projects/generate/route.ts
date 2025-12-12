@@ -2,23 +2,22 @@
 import { OpenAI } from "openai";
 import { auth } from '@clerk/nextjs/server';
 
-// Initialize OpenAI clients
-const minimaxClient = new OpenAI({
-  apiKey: process.env.MINIMAX_API_KEY,
-  baseURL: "https://api.minimax.io/v1",
-});
-
-const openRouterClient = process.env.OPENROUTER_API_KEY ? new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-}) : null;
-
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) {
       return new Response("Unauthorized", { status: 401 });
     }
+
+    const minimaxClient = new OpenAI({
+      apiKey: process.env.MINIMAX_API_KEY,
+      baseURL: "https://api.minimax.io/v1",
+    });
+
+    const openRouterClient = process.env.OPENROUTER_API_KEY ? new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+    }) : null;
 
     const body = await req.json();
     const { prompt, model } = body;

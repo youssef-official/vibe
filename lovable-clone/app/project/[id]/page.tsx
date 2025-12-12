@@ -225,7 +225,7 @@ export default function ProjectPage() {
 
     await startStream('/api/projects/chat', {
         projectId: id,
-        message: userMsg,
+        prompt: userMsg,
         currentFiles: project?.files || {},
         history: messages
     });

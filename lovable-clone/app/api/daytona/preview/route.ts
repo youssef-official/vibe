@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       const sandbox = await daytonaClient.create({
         name: `vibe-project-${filesHash.substring(0, 8)}`,
         // Assuming a simple Node.js/React template for the generated code
-        template: 'react-ts', 
+        language: 'typescript', 
       });
       sandboxId = sandbox.id;
       sandboxCache.set(filesHash, sandboxId);

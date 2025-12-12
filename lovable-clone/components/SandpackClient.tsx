@@ -26,7 +26,7 @@ export default function SandpackClient({ files, viewMode = 'split' }: SandpackCl
       theme="dark"
       files={safeFiles}
       options={{
-        main: "/App.tsx",
+
         externalResources: ["https://cdn.tailwindcss.com"],
         classes: {
             "sp-layout": "!h-full !rounded-none !border-none",
@@ -34,6 +34,7 @@ export default function SandpackClient({ files, viewMode = 'split' }: SandpackCl
         }
       }}
       customSetup={{
+        entry: "/App.tsx",
         dependencies: {
           "lucide-react": "latest",
           "framer-motion": "latest",

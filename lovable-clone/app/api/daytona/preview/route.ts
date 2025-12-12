@@ -43,12 +43,12 @@ export async function POST(request: Request) {
         }
     }
 
-// 3. Synchronize files to the sandbox
-	for (const [path, content] of Object.entries(files)) {
-	    // The Daytona SDK requires content to be a string or Buffer.
-	    // We'll use the write method for file synchronization.
-	    await daytonaClient.write({ sandboxId, path, content: content as string });
-	}
+// 3. Synchronize files to the sandbox using a single update call
+	// This is the correct method for the latest Daytona SDK to update files in bulk.
+	await daytonaClient.update({
+	    sandboxId,
+	    files: files as Record<string, string>,
+	});
 
     // 4. Get the preview URL for the running service (e.g., port 3000 for React)
     // This is the critical part that replaces Sandpack's built-in preview.

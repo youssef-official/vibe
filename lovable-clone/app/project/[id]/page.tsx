@@ -371,7 +371,7 @@ export default function ProjectPage() {
                                 }
                             }}
                             placeholder="Ask follow-up questions or request changes..."
-                          className="min-h-[50px] w-full resize-none rounded-xl border-white/10 bg-[#18181b] p-4 pr-12 text-sm text-white placeholder:text-white/30 focus-visible:ring-blue-500/50 transition-all duration-300" transition-all duration-300"
+                          className="min-h-[50px] w-full resize-none rounded-xl border-white/10 bg-[#18181b] p-4 pr-12 text-sm text-white placeholder:text-white/30 focus-visible:ring-blue-500/50 transition-all duration-300"
                         />
                         <button
                             type="submit"

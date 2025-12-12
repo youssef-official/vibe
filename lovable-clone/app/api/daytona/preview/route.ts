@@ -72,31 +72,20 @@ export async function POST(request: Request) {
 
     // Install dependencies and run the project if it's a new sandbox or files changed significantly
     if (files['package.json']) {
-         console.log('[Daytona] Installing dependencies...');
+         console.log('[Daytona] Triggering background npm install and start...');
          try {
-            const proc = await sandbox.process.executeCommand('npm install');
-            console.log('[Daytona] npm install result:', proc.result);
-            if (proc.exitCode !== 0) {
-                 console.error('[Daytona] npm install failed with exit code:', proc.exitCode);
-            }
+             // Run npm install and npm run dev in background to avoid timeout
+             // Using (cmd1 && cmd2) > log 2>&1 & pattern
+             await sandbox.process.executeCommand('(npm install && npm run dev) > server.log 2>&1 &');
          } catch (err) {
-            console.error('[Daytona] npm install failed:', err);
-         }
-
-         // Start the dev server in background
-         console.log('[Daytona] Starting dev server...');
-         try {
-             // We use & to run in background so executeCommand returns immediately
-             await sandbox.process.executeCommand('npm run dev > server.log 2>&1 &');
-         } catch (err) {
-             console.error('[Daytona] Failed to start dev server:', err);
+             console.error('[Daytona] Failed to trigger background command:', err);
+             // Verify if it's just a "command started" message or actual error.
+             // Usually executeCommand throws if the request fails, but here we expect it to succeed quickly.
          }
     }
 
     // 4. Get the preview URL for the running service (e.g., port 3000 for React)
     console.log(`[Daytona] Getting preview link for port 3000...`);
-    // Add a small delay/retry might be needed if the server takes time to bind port?
-    // But getPreviewLink usually just generates the URL, doesn't check if port is listening (unless Daytona checks).
     const previewLink = await sandbox.getPreviewLink(3000);
     const previewUrl = previewLink.url;
     console.log(`[Daytona] Preview URL: ${previewUrl}`);

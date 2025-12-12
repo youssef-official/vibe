@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { DaytonaClient } from '@daytonaio/sdk';
+// import { Daytona } from '@daytonaio/sdk'; // Removed as it's not used on the client side
 import { Loader2 } from 'lucide-react';
 
 interface DaytonaPreviewProps {

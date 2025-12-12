@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { DaytonaClient } from '@daytonaio/sdk';
+import { Daytona } from '@daytonaio/sdk';
 
 // Initialize Daytona Client
 // The client will automatically pick up the DAYTONA_API_KEY from the environment variables
-const daytonaClient = new DaytonaClient({});
+const daytonaClient = new Daytona({});
 
 // A simple in-memory store to map file hashes to sandbox IDs
 // In a real application, this should be a persistent database

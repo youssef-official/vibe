@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 	for (const [path, content] of Object.entries(files)) {
 	    // The Daytona SDK requires content to be a string or Buffer.
 	    // We'll use the write method for file synchronization.
-	    await daytonaClient.files.write({ sandboxId, path, content: content as string });
+	    await daytonaClient.write({ sandboxId, path, content: content as string });
 	}
 
     // 4. Get the preview URL for the running service (e.g., port 3000 for React)

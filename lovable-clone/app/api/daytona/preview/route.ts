@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Daytona } from '@daytonaio/sdk';
+import { Daytona, PortPreviewUrl } from '@daytonaio/sdk';
 
 // Initialize Daytona Client
 // The client will automatically pick up the DAYTONA_API_KEY from the environment variables
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     if (!sandboxId) {
       // 1. Create a new sandbox
-      const sandbox = await daytonaClient.sandboxes.create({
+      const sandbox = await daytonaClient.create({
         name: `vibe-project-${filesHash.substring(0, 8)}`,
         // Assuming a simple Node.js/React template for the generated code
         template: 'react-ts', 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     } else {
         // 2. Check if the sandbox is still running and update it
         try {
-            await daytonaClient.sandboxes.get(sandboxId);
+            await daytonaClient.get(sandboxId);
         } catch (e) {
             // Sandbox not found or stopped, create a new one
             sandboxCache.delete(filesHash);
@@ -59,10 +59,9 @@ export async function POST(request: Request) {
 
     // 4. Get the preview URL for the running service (e.g., port 3000 for React)
     // This is the critical part that replaces Sandpack's built-in preview.
-    const previewUrl = await daytonaClient.sandboxes.getPreviewUrl({
-        sandboxId,
-        port: 3000, // Default port for React/Next.js apps
-    });
+    const sandbox = await daytonaClient.get(sandboxId);
+    const previewLink = await sandbox.getPreviewLink(3000);
+    const previewUrl = previewLink.url;
 
     return NextResponse.json({ previewUrl });
 

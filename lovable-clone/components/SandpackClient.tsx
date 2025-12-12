@@ -11,9 +11,10 @@ import {
 
 interface SandpackClientProps {
   files: Record<string, string>;
+  viewMode?: 'split' | 'code' | 'preview';
 }
 
-export default function SandpackClient({ files }: SandpackClientProps) {
+export default function SandpackClient({ files, viewMode = 'split' }: SandpackClientProps) {
   // Ensure we have at least one file to prevent crashes
   const safeFiles = Object.keys(files).length > 0 ? files : {
       "App.tsx": `export default function App() { return <div className="p-4 text-white">Generating code...</div> }`
@@ -41,20 +42,26 @@ export default function SandpackClient({ files }: SandpackClientProps) {
       }}
     >
       <SandpackLayout className="h-full !bg-[#0f0f0f]">
-        <SandpackFileExplorer className="!h-full !bg-[#151515] !border-r !border-white/10" />
-        <SandpackCodeEditor
-            showTabs
-            closableTabs
-            showLineNumbers
-            showInlineErrors
-            wrapContent
-            className="!h-full"
-        />
-        <SandpackPreview
-            showNavigator={false}
-            showRefreshButton={true}
-            className="!h-full"
-        />
+        {(viewMode === 'split' || viewMode === 'code') && (
+          <>
+            <SandpackFileExplorer className="!h-full !bg-[#151515] !border-r !border-white/10" />
+            <SandpackCodeEditor
+                showTabs
+                closableTabs
+                showLineNumbers
+                showInlineErrors
+                wrapContent
+                className="!h-full"
+            />
+          </>
+        )}
+        {(viewMode === 'split' || viewMode === 'preview') && (
+          <SandpackPreview
+              showNavigator={false}
+              showRefreshButton={true}
+              className="!h-full"
+          />
+        )}
       </SandpackLayout>
     </SandpackProvider>
   );

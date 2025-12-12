@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     3. Return the FULL content of any file you modify.
     4. You can add an <explanation> tag for your message.
     5. DO NOT use markdown code blocks.
+6. Your explanation MUST be clean, conversational, and MUST NOT contain any special characters like #$ or similar formatting.
 
     Example Output:
     <explanation>I added a button to the header.</explanation>

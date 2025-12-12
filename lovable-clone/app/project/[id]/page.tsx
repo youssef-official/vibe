@@ -143,7 +143,7 @@ export default function ProjectPage() {
                     const newHistory = [...prev];
                     const lastMsg = newHistory[newHistory.length - 1];
                     if (lastMsg.role === 'assistant') {
-                        lastMsg.content = currentExplanation;
+                        lastMsg.content = currentExplanation.replace(/[#$]/g, '').trim();
                     } else {
                         newHistory.push({ role: 'assistant', content: currentExplanation });
                     }
@@ -414,7 +414,7 @@ export default function ProjectPage() {
 
                    I'll pass the files to SandpackClient.
                 */}
-                <SandpackClient files={project?.files || {}} />
+                <SandpackClient files={project?.files || {}} viewMode={activeTab === 'code' ? 'code' : 'preview'} />
             </div>
         </div>
     </div>

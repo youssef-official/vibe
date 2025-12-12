@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     1. You MUST use specific XML tags to output files.
     2. Format: <file path="filename">content</file>
     3. DO NOT use markdown code blocks (no \`\`\`xml or \`\`\`javascript).
-    4. Provide a FULL implementation.
+    4. Provide a FULL, functional, and non-dummy implementation. DO NOT use placeholders like "TODO" or "Coming Soon".
 
     REQUIRED FILES:
     - App.tsx (Main component)

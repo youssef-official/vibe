@@ -1,5 +1,4 @@
 
-import { NextResponse } from 'next/server';
 import { OpenAI } from "openai";
 import { auth } from '@clerk/nextjs/server';
 
@@ -8,19 +7,11 @@ const client = new OpenAI({
   baseURL: "https://api.minimax.io/v1",
 });
 
-function cleanResponse(content: string) {
-    let cleaned = content;
-    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '');
-    cleaned = cleaned.replace(/^```json\s*/g, '').replace(/```$/g, '');
-    cleaned = cleaned.replace(/^```\s*/g, '').replace(/```$/g, '');
-    return cleaned.trim();
-}
-
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401 });
     }
 
     const body = await req.json();
@@ -36,19 +27,22 @@ export async function POST(req: Request) {
 
     Your task is to update the files based on the user's request.
 
-    Format your response as a JSON object:
-    {
-        "files": {
-            "App.tsx": "...",
-            "components/NewComponent.tsx": "..."
-        },
-        "explanation": "A friendly, conversational message explaining what you changed. Be helpful and enthusiastic."
-    }
+    CRITICAL OUTPUT FORMAT RULES:
+    1. You MUST use specific XML tags to output files.
+    2. Format: <file path="filename">content</file>
+    3. Return the FULL content of any file you modify.
+    4. You can add an <explanation> tag for your message.
+    5. DO NOT use markdown code blocks.
 
-    CRITICAL:
-    1. Return the FULL content of any file you modify.
-    2. Return ONLY the JSON object.
-    3. Do not assume single-file structure anymore.
+    Example Output:
+    <explanation>I added a button to the header.</explanation>
+    <file path="components/Header.tsx">
+    // Full content of Header.tsx
+    </file>
+
+    GUIDELINES:
+    - Only output files that need to be changed or created.
+    - Be conversational in the explanation.
     `;
 
     // Construct conversation history for context
@@ -58,43 +52,48 @@ export async function POST(req: Request) {
         content: msg.content
     }));
 
-    const completion = await client.chat.completions.create({
-      model: "MiniMax-M2",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...recentHistory,
-        { role: "user", content: message }
-      ],
-      temperature: 0.5,
-      max_tokens: 4000,
+    // Create a streaming response
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+            const completion = await client.chat.completions.create({
+              model: "MiniMax-M2",
+              messages: [
+                { role: "system", content: systemPrompt },
+                ...recentHistory,
+                { role: "user", content: message }
+              ],
+              temperature: 0.5,
+              max_tokens: 4000,
+              stream: true,
+            });
+
+            for await (const chunk of completion) {
+                const content = chunk.choices[0]?.delta?.content;
+                if (content) {
+                    controller.enqueue(encoder.encode(content));
+                }
+            }
+        } catch (err) {
+            console.error("Streaming error:", err);
+            controller.error(err);
+        } finally {
+            controller.close();
+        }
+      },
     });
 
-    const content = completion.choices[0]?.message?.content || "";
-    const cleanedContent = cleanResponse(content);
-
-    let generatedFiles = currentFiles;
-    let explanation = "Updated code.";
-
-    try {
-        const json = JSON.parse(cleanedContent);
-        // Merge new files with existing files
-        generatedFiles = { ...currentFiles, ...json.files };
-        explanation = json.explanation;
-    } catch {
-        console.warn("Failed to parse JSON response in chat");
-        explanation = "I made the changes, but there was an error parsing the response.";
-    }
-
-    return NextResponse.json({
-        files: generatedFiles,
-        explanation
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
     });
 
   } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
     console.error('Chat API Error:', error);
-    return NextResponse.json({
-        error: 'Internal Server Error',
-        details: error.message
-    }, { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }

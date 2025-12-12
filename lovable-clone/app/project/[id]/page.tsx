@@ -3,32 +3,67 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Send, Loader2, Download } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import JSZip from 'jszip';
 import SandpackClient from '@/components/SandpackClient';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { UserButton } from '@/components/UserButton';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Loader2,
+  Send,
+  Download,
+  ArrowLeft,
+  Code2,
+  Eye,
+  Sparkles,
+  FileCode,
+  CheckCircle2
+} from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  files?: string[];
+}
+
+interface ProjectData {
+  id: string;
+  name: string;
+  prompt: string;
+  files: Record<string, string>;
+  explanation?: string;
+  model?: string;
+}
+
+interface GenerationState {
+  isGenerating: boolean;
+  status: string;
+  currentFile?: string;
+  processedFiles: string[];
 }
 
 export default function ProjectPage() {
   const params = useParams();
   const id = params?.id as string;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [project, setProject] = useState<any>(null);
+  const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
 
-  // Chat state
+  // Chat & Generation State
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [isChatting, setIsChatting] = useState(false);
+  const [genState, setGenState] = useState<GenerationState>({
+    isGenerating: false,
+    status: '',
+    processedFiles: []
+  });
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Initial fetch and generation
+  // Initial fetch
   useEffect(() => {
     async function fetchProject() {
       try {
@@ -38,14 +73,17 @@ export default function ProjectPage() {
           if (found) {
             setProject(found);
 
-            // If the project files are empty, start generation automatically
+            // Check if we need to start initial generation
             const hasFiles = found.files && Object.keys(found.files).length > 0;
-            if (!hasFiles && found.explanation === "Generating...") {
+            if (!hasFiles) {
                 setMessages([
                     { role: 'user', content: found.prompt },
-                    { role: 'assistant', content: 'Generating your project...' }
+                    { role: 'assistant', content: 'Initializing project generation...' }
                 ]);
-                startGeneration(found);
+                startStream('/api/projects/generate', {
+                    prompt: found.prompt,
+                    model: found.model
+                });
             } else {
                  setMessages([
                     { role: 'user', content: found.prompt },
@@ -53,9 +91,6 @@ export default function ProjectPage() {
                 ]);
             }
           }
-        } else {
-            console.error("Project not found or error:", res.status);
-            setProject(null);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -66,246 +101,322 @@ export default function ProjectPage() {
     if (id) fetchProject();
   }, [id]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const startGeneration = async (projectData: any) => {
-      try {
-        const response = await fetch('/api/projects/generate', {
+  const startStream = async (endpoint: string, body: { prompt: string; model?: string; projectId?: string; message?: string; currentFiles?: Record<string, string>; history?: Message[] }) => {
+    setGenState({
+        isGenerating: true,
+        status: 'Starting...',
+        processedFiles: []
+    });
+
+    try {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                prompt: projectData.prompt,
-                model: projectData.model
-            })
+            body: JSON.stringify(body)
         });
 
         if (!response.body) throw new Error("No stream body");
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let fullText = "";
+
+        let buffer = '';
+        let currentExplanation = '';
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const text = decoder.decode(value, { stream: true });
-            fullText += text;
-        }
 
-        let generatedFiles = {};
-        let explanation = "";
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
 
-        let cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/g, '');
-        cleaned = cleaned.replace(/^```json\s*/g, '').replace(/```$/g, '');
-        cleaned = cleaned.replace(/^```\s*/g, '').replace(/```$/g, '');
-        cleaned = cleaned.trim();
+            // Parse XML-like tags incrementally
+            // We look for complete <file path="...">...</file> blocks
+            // And <explanation>...</explanation> blocks
 
-        try {
-            const json = JSON.parse(cleaned);
-            generatedFiles = json.files || {};
-            explanation = json.explanation;
-        } catch {
-             // Fallback to single file if parsing fails
-             generatedFiles = { "App.tsx": cleaned };
-             explanation = "Generated code.";
-        }
+            // 1. Check for explanation
+            const explanationMatch = buffer.match(/<explanation>([\s\S]*?)<\/explanation>/);
+            if (explanationMatch) {
+                currentExplanation = explanationMatch[1].trim();
+                // Update the last assistant message with the explanation
+                setMessages(prev => {
+                    const newHistory = [...prev];
+                    const lastMsg = newHistory[newHistory.length - 1];
+                    if (lastMsg.role === 'assistant') {
+                        lastMsg.content = currentExplanation;
+                    } else {
+                        newHistory.push({ role: 'assistant', content: currentExplanation });
+                    }
+                    return newHistory;
+                });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setProject((prev: any) => ({ ...prev, files: generatedFiles, explanation }));
-        setMessages(prev => {
-            const newHistory = [...prev];
-            if (newHistory[newHistory.length - 1].role === 'assistant') {
-                newHistory[newHistory.length - 1].content = explanation;
+                // Remove explanation from buffer
+                const endIndex = explanationMatch.index! + explanationMatch[0].length;
+                buffer = buffer.slice(endIndex);
             }
-            return newHistory;
-        });
 
-      } catch (err) {
-          console.error("Generation error:", err);
-          setMessages(prev => [...prev, { role: 'assistant', content: 'Error generating code.' }]);
-      }
-  };
+            // 2. Check for files
+            // Regex to find all complete file blocks
+            const fileRegex = /<file path="([^"]+)">([\s\S]*?)<\/file>/g;
+            let match;
+            let lastIndex = 0;
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+            while ((match = fileRegex.exec(buffer)) !== null) {
+                const [, path, content] = match;
 
-  const handleDownload = async () => {
-    if (!project?.files) return;
-    setDownloading(true);
+                // Update project files state
+                setProject(prev => {
+                    if (!prev) return null;
+                    const newFiles = { ...prev.files, [path]: content.trim() };
+                    return { ...prev, files: newFiles };
+                });
 
-    try {
-        const zip = new JSZip();
+                // Update generation state
+                setGenState(prev => {
+                    if (prev.processedFiles.includes(path)) return prev;
+                    return {
+                        ...prev,
+                        status: `Generated ${path}`,
+                        currentFile: undefined, // Finished this file
+                        processedFiles: [...prev.processedFiles, path]
+                    };
+                });
 
-        Object.entries(project.files).forEach(([filename, content]) => {
-            zip.file(filename, content as string);
-        });
+                lastIndex = match.index + match[0].length;
+            }
 
-        const blob = await zip.generateAsync({ type: "blob" });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${project.name || "project"}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+            // Remove processed files from buffer
+            if (lastIndex > 0) {
+                buffer = buffer.slice(lastIndex);
+            }
 
-    } catch (e) {
-        console.error("Download failed", e);
+            // 3. Check for current incomplete file (to show status)
+            const partialFileMatch = buffer.match(/<file path="([^"]+)">/g);
+            if (partialFileMatch) {
+                const lastFilePathMatch = buffer.match(/<file path="([^"]+)">[^<]*$/); // Last open tag not closed
+                if (lastFilePathMatch) {
+                    setGenState(prev => ({
+                        ...prev,
+                        currentFile: lastFilePathMatch[1],
+                        status: `Writing ${lastFilePathMatch[1]}...`
+                    }));
+                }
+            }
+        }
+
+    } catch (err) {
+        console.error("Stream error:", err);
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Error generating code.' }]);
     } finally {
-        setDownloading(false);
+        setGenState(prev => ({ ...prev, isGenerating: false, status: 'Complete', currentFile: undefined }));
     }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || isChatting) return;
+    if (!chatInput.trim() || genState.isGenerating) return;
 
     const userMsg = chatInput;
     setChatInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setIsChatting(true);
 
-    try {
-        const res = await fetch('/api/projects/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                projectId: id,
-                message: userMsg,
-                // Send file context
-                currentFiles: project.files,
-                history: messages
-            })
-        });
+    // Add temporary assistant message
+    setMessages(prev => [...prev, { role: 'assistant', content: 'Thinking...' }]);
 
-        if (!res.ok) {
-            throw new Error('Failed to update project');
-        }
-
-        const data = await res.json();
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setProject((prev: any) => ({ ...prev, files: data.files || prev.files }));
-
-        setMessages(prev => [...prev, { role: 'assistant', content: data.explanation }]);
-
-    } catch (error) {
-        console.error('Chat error:', error);
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error updating the code.' }]);
-    } finally {
-        setIsChatting(false);
-    }
+    await startStream('/api/projects/chat', {
+        projectId: id,
+        message: userMsg,
+        currentFiles: project?.files || {},
+        history: messages
+    });
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center lovable-gradient">
-        <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  const handleDownload = async () => {
+    if (!project?.files) return;
+    const zip = new JSZip();
+    Object.entries(project.files).forEach(([filename, content]) => {
+        zip.file(filename, content);
+    });
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${project.name || "project"}.zip`;
+    a.click();
+  };
 
-  if (!project) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center lovable-gradient text-white">
-        <h1 className="text-2xl font-bold mb-4">Project not found</h1>
-        <Link href="/" className="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
-          Return Home
-        </Link>
-      </div>
-    );
-  }
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, genState.status]);
+
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center bg-[#09090b] text-white">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+    </div>
+  );
+
+  if (!project) return <div>Project not found</div>;
 
   return (
-    <div className="h-screen bg-[#000000] text-white flex flex-col overflow-hidden font-sans selection:bg-blue-500/30">
-      {/* Header */}
-      <header className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-[#0a0a0a]/50 backdrop-blur-md shrink-0 z-20">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="p-2 hover:bg-white/5 rounded-lg transition-colors text-white/60 hover:text-white group">
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-          </Link>
-          <div>
-            <h1 className="font-semibold text-sm truncate max-w-[200px] text-white/90">{project.name}</h1>
-            <p className="text-[10px] text-white/40">Minimax M2</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-all hover:shadow-[0_0_15px_rgba(37,99,235,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Download
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden">
-
-        {/* Left Sidebar: Chat */}
-        <div className="w-96 border-r border-white/10 flex flex-col bg-[#050505]/80 backdrop-blur-xl">
-            {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-                {messages.map((msg, idx) => (
-                    <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-fade-in-up`}>
-                        {msg.role === 'user' ? (
-                            <div className="max-w-[90%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm bg-blue-600/90 text-white rounded-tr-sm backdrop-blur-sm">
-                                {msg.content}
-                            </div>
-                        ) : (
-                            <div className="max-w-[90%] py-2 text-sm leading-relaxed text-white/80 font-medium">
-                                {msg.content}
-                            </div>
-                        )}
-                    </div>
-                ))}
-                {isChatting && (
-                    <div className="flex items-center gap-2 text-white/40 text-xs pl-2 animate-pulse">
-                        <Sparkles className="w-3 h-3 animate-spin" />
-                        Thinking...
-                    </div>
-                )}
-                <div ref={chatEndRef} />
+    <div className="flex h-screen flex-col overflow-hidden bg-[#09090b] text-white selection:bg-blue-500/30">
+        {/* Header */}
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-[#09090b] px-4">
+            <div className="flex items-center gap-4">
+                <Link href="/" className="group rounded-lg p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white">
+                    <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                </Link>
+                <div>
+                    <h1 className="text-sm font-semibold text-white/90">{project.name}</h1>
+                    <p className="text-[10px] text-white/40">Minimax M2</p>
+                </div>
             </div>
 
-            {/* Chat Input */}
-            <div className="p-4 border-t border-white/5 bg-[#0a0a0a]/50">
-                <form onSubmit={handleSendMessage} className="relative group">
-                    <textarea
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Describe changes or ask questions..."
-                        className="w-full bg-[#111] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all resize-none min-h-[80px]"
-                        rows={3}
-                        disabled={isChatting}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSendMessage(e);
-                            }
-                        }}
-                    />
+            <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-lg bg-[#18181b] p-1">
                     <button
-                        type="submit"
-                        disabled={!chatInput.trim() || isChatting}
-                        className="absolute right-3 bottom-3 p-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white disabled:opacity-50 disabled:bg-transparent transition-all shadow-lg hover:shadow-blue-500/20"
+                        onClick={() => setActiveTab('code')}
+                        className={`rounded-md p-1.5 transition-all ${activeTab === 'code' ? 'bg-[#27272a] text-white' : 'text-white/40 hover:text-white'}`}
                     >
-                        {isChatting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        <Code2 className="h-4 w-4" />
                     </button>
-                </form>
+                    <button
+                        onClick={() => setActiveTab('preview')}
+                        className={`rounded-md p-1.5 transition-all ${activeTab === 'preview' ? 'bg-[#27272a] text-white' : 'text-white/40 hover:text-white'}`}
+                    >
+                        <Eye className="h-4 w-4" />
+                    </button>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleDownload} className="h-8 gap-2 border-white/10 bg-transparent text-white/80 hover:bg-white/5">
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Export</span>
+                </Button>
+                <UserButton />
+            </div>
+        </header>
+
+        {/* Main Workspace */}
+        <div className="flex flex-1 overflow-hidden">
+            {/* Left Sidebar: Chat */}
+            <div className="flex w-[400px] flex-col border-r border-white/10 bg-[#09090b]">
+                {/* File Generation Status (Collapsible or floating) */}
+                <AnimatePresence>
+                    {genState.isGenerating && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="border-b border-white/10 bg-[#18181b]/50 px-4 py-3"
+                        >
+                            <div className="flex items-center gap-2 text-sm text-blue-400">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span className="font-medium">{genState.status}</span>
+                            </div>
+                            {genState.processedFiles.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {genState.processedFiles.map(f => (
+                                        <span key={f} className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            {f.split('/').pop()}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div className="flex flex-col gap-6">
+                        {messages.map((msg, idx) => (
+                            <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${msg.role === 'user' ? 'bg-white text-black' : 'bg-blue-600 text-white'}`}>
+                                    {msg.role === 'user' ? <div className="h-4 w-4 rounded-full bg-black" /> : <Sparkles className="h-4 w-4" />}
+                                </div>
+                                <div className={`flex max-w-[85%] flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                    <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                                        msg.role === 'user'
+                                            ? 'bg-[#27272a] text-white'
+                                            : 'bg-transparent text-white/90'
+                                    }`}>
+                                        {msg.content}
+                                    </div>
+                                    {msg.files && (
+                                        <div className="mt-1 flex flex-wrap gap-2">
+                                            {msg.files.map(f => (
+                                                <div key={f} className="flex items-center gap-1.5 rounded-md border border-white/10 bg-[#18181b] px-2 py-1 text-xs text-white/60">
+                                                    <FileCode className="h-3 w-3" />
+                                                    {f}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                    </div>
+                </div>
+
+                {/* Input */}
+                <div className="border-t border-white/10 bg-[#09090b] p-4">
+                    <form onSubmit={handleSendMessage} className="relative">
+                        <Textarea
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSendMessage(e);
+                                }
+                            }}
+                            placeholder="Ask follow-up questions or request changes..."
+                            className="min-h-[100px] w-full resize-none rounded-xl border-white/10 bg-[#18181b] p-4 pr-12 text-sm text-white placeholder:text-white/30 focus-visible:ring-blue-500/50"
+                        />
+                        <button
+                            type="submit"
+                            disabled={!chatInput.trim() || genState.isGenerating}
+                            className="absolute bottom-3 right-3 rounded-lg bg-blue-600 p-2 text-white transition-all hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600"
+                        >
+                            {genState.isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {/* Right Area: Sandpack */}
+            <div className={`flex-1 flex flex-col overflow-hidden bg-[#0f0f0f] relative ${activeTab === 'code' ? 'block' : 'block'}`}>
+                {/* We keep Sandpack mounted but use CSS to hide/show or manage layout */}
+                 {/*
+                   Wait, SandpackClient is layout-agnostic regarding tabs if we control it?
+                   Actually, SandpackClient in this codebase is a wrapper around Sandpack.
+                   The user wants "Fix the generation page shape" -> "Open-lovable-DIY-main" style.
+                   The attached file has a split view or tabs.
+                   Sandpack has its own layout options.
+                   I'll modify SandpackClient slightly or just pass props if possible.
+                   The current `SandpackClient` shows both editor and preview.
+                   I will hide/show them based on `activeTab` using CSS classes passed to it if I modify it,
+                   OR I can just rely on Sandpack's internal layout if I configure it right.
+
+                   But `SandpackClient` implementation I read earlier uses `SandpackLayout` with `SandpackCodeEditor` and `SandpackPreview`.
+                   I can't easily toggle them from outside without modifying `SandpackClient`.
+
+                   Let's assume for now I will display both side-by-side or just use the current implementation which shows both.
+                   However, for small screens or preference, tabs are good.
+
+                   Actually, the "Open-Lovable" reference has a dedicated "Generation" tab (Code) and "Preview" tab.
+
+                   I will update `SandpackClient.tsx` to accept a `viewMode` prop?
+                   Or I can just render it and let it be.
+
+                   Let's stick to the attached file's design philosophy:
+                   Sidebar (Chat) + Main Content (Code/Preview).
+
+                   I'll pass the files to SandpackClient.
+                */}
+                <SandpackClient files={project?.files || {}} />
             </div>
         </div>
-
-        {/* Right Area: Sandpack (Preview + Code + Files) */}
-        <div className="flex-1 bg-[#0f0f0f] relative overflow-hidden flex flex-col">
-            <SandpackClient files={project.files || {}} />
-        </div>
-
-      </div>
     </div>
   );
 }

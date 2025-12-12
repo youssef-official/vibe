@@ -5,7 +5,8 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import JSZip from 'jszip';
-import SandpackClient from '@/components/SandpackClient';
+import DaytonaPreview from '@/components/DaytonaPreview';
+import CodeEditor from '@/components/CodeEditor'; // We will create this component for code viewing
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { UserButton } from '@/components/UserButton';
@@ -385,32 +386,19 @@ export default function ProjectPage() {
             </div>
 
             {/* Right Area: Sandpack */}
-            <div className={`flex-1 flex flex-col overflow-hidden bg-[#0f0f0f] relative ${activeTab === 'code' ? 'block' : 'block'}`}>
-                {/* We keep Sandpack mounted but use CSS to hide/show or manage layout */}
-                 {/*
-                   Wait, SandpackClient is layout-agnostic regarding tabs if we control it?
-                   Actually, SandpackClient in this codebase is a wrapper around Sandpack.
-                   The user wants "Fix the generation page shape" -> "Open-lovable-DIY-main" style.
-                   The attached file has a split view or tabs.
-                   Sandpack has its own layout options.
-                   I'll modify SandpackClient slightly or just pass props if possible.
-                   The current `SandpackClient` shows both editor and preview.
-                   I will hide/show them based on `activeTab` using CSS classes passed to it if I modify it,
-                   OR I can just rely on Sandpack's internal layout if I configure it right.
-
-                   But `SandpackClient` implementation I read earlier uses `SandpackLayout` with `SandpackCodeEditor` and `SandpackPreview`.
-                   I can't easily toggle them from outside without modifying `SandpackClient`.
-
-                   Let's assume for now I will display both side-by-side or just use the current implementation which shows both.
-                   However, for small screens or preference, tabs are good.
-
-                   Actually, the "Open-Lovable" reference has a dedicated "Generation" tab (Code) and "Preview" tab.
-
-                   I will update `SandpackClient.tsx` to accept a `viewMode` prop?
-                   Or I can just render it and let it be.
-
-                   Let's stick to the attached file's design philosophy:
-                   Sidebar (Chat) + Main Content (Code/Preview).
+            <div className={`flex-1 flex flex-col overflow-hidden{/* Right Area: Code/Preview */}
+            <div className="flex-1 flex flex-col overflow-hidden bg-[#0f0f0f] relative">
+                {/* The image shows a full-screen preview area, with the chat on the left.
+                    The header has tabs for 'code' and 'preview'.
+                    We will use the full right area for either the code editor or the Daytona preview.
+                */}
+                {activeTab === 'preview' && (
+                    <DaytonaPreview files={project?.files || {}} />
+                )}
+                {activeTab === 'code' && (
+                    <CodeEditor files={project?.files || {}} />
+                )}
+            </div>ode/Preview).
 
                    I'll pass the files to SandpackClient.
                 */}

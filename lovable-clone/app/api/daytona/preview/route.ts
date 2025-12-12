@@ -20,7 +20,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'DAYTONA_API_KEY is not set' }, { status: 500 });
     }
 
-    const daytonaClient = new Daytona({ organizationId: process.env.DAYTONA_ORGANIZATION_ID });
+    // Initialize Daytona client. Pass organizationId only if it exists.
+    // Use explicit type assertion to satisfy TS if needed, or rely on optional property.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const clientConfig: any = {};
+    if (process.env.DAYTONA_ORGANIZATION_ID) {
+        clientConfig.organizationId = process.env.DAYTONA_ORGANIZATION_ID;
+    }
+    const daytonaClient = new Daytona(clientConfig);
 
     let sandboxId: string | undefined = sandboxCache.get(filesHash);
     let sandbox;
@@ -61,7 +68,15 @@ export async function POST(request: Request) {
       } catch (err) {
           console.error('[Daytona] Failed to create sandbox:', err);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return NextResponse.json({ error: 'Failed to create sandbox environment', details: (err as any).message }, { status: 500 });
+          const errorMessage = (err as any).message || String(err);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const errorDetails = (err as any).response?.data || (err as any).stack;
+
+          return NextResponse.json({
+            error: 'Failed to create sandbox environment',
+            details: errorMessage,
+            debug: errorDetails
+          }, { status: 500 });
       }
     }
 
@@ -78,7 +93,7 @@ export async function POST(request: Request) {
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 20000));
 
             await Promise.race([waitPromise, timeoutPromise]);
-        } catch (err) {
+        } catch {
              console.log('[Daytona] Sandbox start timed out or taking long, asking client to retry...');
              return NextResponse.json({ status: 'starting', message: 'Sandbox is initializing...' }, { status: 202 });
         }

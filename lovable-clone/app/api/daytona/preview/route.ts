@@ -46,9 +46,7 @@ export async function POST(request: Request) {
 
 // 3. Synchronize files to the sandbox using a single update call
 	// The sandbox object should now be available from either creation or retrieval.
-	await sandbox.update({
-	    files: files as Record<string, string>,
-	});
+await daytonaClient.syncFiles(sandboxId, files as Record<string, string>);
 
     // 4. Get the preview URL for the running service (e.g., port 3000 for React)
     // This is the critical part that replaces Sandpack's built-in preview.

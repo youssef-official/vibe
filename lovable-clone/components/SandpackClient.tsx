@@ -15,10 +15,17 @@ interface SandpackClientProps {
 }
 
 export default function SandpackClient({ files, viewMode = 'split' }: SandpackClientProps) {
-  // Ensure we have at least one file to prevent crashes
-  const safeFiles = Object.keys(files).length > 0 ? files : {
-      "App.tsx": `export default function App() { return <div className="p-4 text-white">Generating code...</div> }`
-  };
+  // Use an empty object if no files are present to suppress template files,
+  // and let the UI handle the "Generating code..." message.
+  const safeFiles = files;
+
+  if (Object.keys(safeFiles).length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[#0f0f0f] text-white/40">
+        <p>Generating code...</p>
+      </div>
+    );
+  }
 
   return (
     <SandpackProvider

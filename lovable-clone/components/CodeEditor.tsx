@@ -33,7 +33,7 @@ export default function CodeEditor({ files }: CodeEditorProps) {
 
   if (filePaths.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#1e1e1e] text-white/40">
+      <div className="flex h-full items-center justify-center bg-[#09090b] text-white/40">
         <p>No files generated yet.</p>
       </div>
     );
@@ -43,16 +43,16 @@ export default function CodeEditor({ files }: CodeEditorProps) {
   const currentLanguage = getLanguage(activeFile);
 
   return (
-    <div className="flex h-full flex-col bg-[#1e1e1e]">
+    <div className="flex h-full flex-col bg-[#09090b]">
       {/* File Tabs */}
       <Tabs value={activeFile} onValueChange={setActiveFile} className="w-full">
         <ScrollArea className="w-full whitespace-nowrap border-b border-white/10">
-          <TabsList className="h-auto rounded-none border-b-0 bg-transparent p-0">
+          <TabsList className="h-auto rounded-none border-b-0 bg-[#0f0f0f] p-0 w-full justify-start">
             {filePaths.map((path) => (
               <TabsTrigger
                 key={path}
                 value={path}
-                className="h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 py-2 text-sm font-medium text-white/60 data-[state=active]:border-blue-500 data-[state=active]:text-white data-[state=active]:shadow-none"
+                className="h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 py-2 text-sm font-medium text-white/60 data-[state=active]:border-blue-500 data-[state=active]:text-white data-[state=active]:bg-[#18181b] hover:bg-[#18181b]/50"
               >
                 {path.split('/').pop()}
               </TabsTrigger>
@@ -62,7 +62,7 @@ export default function CodeEditor({ files }: CodeEditorProps) {
       </Tabs>
 
       {/* Monaco Editor */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden pt-2">
         <Editor
           height="100%"
           language={currentLanguage}
@@ -75,6 +75,7 @@ export default function CodeEditor({ files }: CodeEditorProps) {
             scrollBeyondLastLine: false,
             wordWrap: 'on',
             contextmenu: false,
+            padding: { top: 16 }
           }}
         />
       </div>

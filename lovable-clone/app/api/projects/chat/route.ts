@@ -2,17 +2,17 @@
 import { OpenAI } from "openai";
 import { auth } from '@clerk/nextjs/server';
 
-const client = new OpenAI({
-  apiKey: process.env.MINIMAX_API_KEY,
-  baseURL: "https://api.minimax.io/v1",
-});
-
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) {
       return new Response("Unauthorized", { status: 401 });
     }
+
+    const client = new OpenAI({
+      apiKey: process.env.MINIMAX_API_KEY,
+      baseURL: "https://api.minimax.io/v1",
+    });
 
     const body = await req.json();
     const { message, currentFiles, history } = body;

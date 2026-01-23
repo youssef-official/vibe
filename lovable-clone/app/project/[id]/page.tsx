@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import JSZip from 'jszip';
-import DaytonaPreview from '@/components/DaytonaPreview';
+import SandpackPreview from '@/components/SandpackPreview';
 import CodeEditor from '@/components/CodeEditor';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -419,7 +419,7 @@ export default function ProjectPage() {
                          <div className="flex-1 relative">
                             {activeTab === 'preview' && (
                                 <div className="absolute inset-0 bg-white">
-                                    <DaytonaPreview files={project?.files || {}} key={previewKey} />
+                                    <SandpackPreview files={project?.files || {}} />
                                 </div>
                             )}
                             {activeTab === 'code' && (

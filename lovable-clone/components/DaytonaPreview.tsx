@@ -63,7 +63,10 @@ export default function DaytonaPreview({ files }: DaytonaPreviewProps) {
 
         if (!response.ok) {
            const errorData = await response.json();
-           throw new Error(errorData.error || 'Failed to get Daytona preview URL');
+           const msg = errorData.error || 'Failed to get Daytona preview URL';
+           const details = errorData.details ? ` (${errorData.details})` : '';
+           console.error('Daytona API Error Details:', errorData);
+           throw new Error(msg + details);
         }
 
         const data = await response.json();
